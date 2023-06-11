@@ -21,54 +21,22 @@ void Game_Engine::Run()
 		this->time_per_frame = sf::seconds(1.f / this->speed);
 
 		// CONTROLS
-		sf::Event event;
-		while (this->window.pollEvent(event))
-		{
-			this->Check_Keyboard();
-			// wykrywanie myszy oraz wcisniecia przycisku
-			if (this->back_groud[1]->getGlobalBounds().contains(this->window.mapPixelToCoords(sf::Mouse::getPosition(this->window))) && event.type == sf::Event::MouseButtonPressed)
-			{
-				this->window.close();
-			}
-			if (In_Menu)
-			{
-				if (this->free_elements[0]->getGlobalBounds().contains(this->window.mapPixelToCoords(sf::Mouse::getPosition(this->window))) && event.type == sf::Event::MouseButtonPressed)
-				{
-					this->In_Menu = false;
-					//this->snake_direction = DIR::RIGHT;
-					this->back_groud[0]->setColor(sf::Color(255, 255, 255, 255));
-					delete this->free_elements[0];
-					this->free_elements.clear();
-				}
-			}
-			// wykrywanie myszy
-			if (this->back_groud[1]->getGlobalBounds().contains(this->window.mapPixelToCoords(sf::Mouse::getPosition(this->window))))
-			{
-				this->back_groud[1]->setColor(sf::Color(255, 255, 255, 255));
-			}
-			else
-			{
-				this->back_groud[1]->setColor(sf::Color(190, 190, 190, 255));
-			}
-			if (this->In_Menu)
-			{
-				if (this->free_elements[0]->getGlobalBounds().contains(this->window.mapPixelToCoords(sf::Mouse::getPosition(this->window))))
-				{
-					this->free_elements[0]->setColor(sf::Color(255, 255, 255, 255));
-				}
-				else
-				{
-					this->free_elements[0]->setColor(sf::Color(190, 190, 190, 255));
-				}
-			}
-		}
+		this->Pull_Events();
 
 		// SNAKE MOVEMENT
 		if (this->elapsed >= this->time_per_frame)
 		{
-			//this->Move_Snake();
 			this->Smooth_Snake_Motion();
 			this->elapsed -= this->time_per_frame;
+		}
+
+		// MENU ODRADZANIA
+		if (this->Is_Snake_Dead)
+		{
+			this->Init_Replay_Menu();
+			this->Is_Snake_Dead = false;
+			this->In_Menu = true;
+			this->Reset_Game();
 		}
 		// WINDOW UPDATE
 		this->window.clear(sf::Color::Transparent);
@@ -101,6 +69,11 @@ void Game_Engine::Init_Text()
 	this->best_score_text.setPosition(240.f, 7.f);
 }
 
+void Game_Engine::Init_Replay_Menu()
+{
+	this->free_elements.push_back(new Texture_Manager(282.5, 312.5, 0.5f, 200.f, 64.f, "texture/replay_button.png", sf::Color(230, 230, 230, 255)));
+}
+
 void Game_Engine::Init_Window() // Wymiary okna : 565 x 625
 {
 	this->settings.antialiasingLevel = 8;
@@ -116,13 +89,13 @@ void Game_Engine::Init_Window() // Wymiary okna : 565 x 625
 
 void Game_Engine::Set_Best_Score()
 {
-
-	if (std::stoi(best_score) <= score)
+	if (std::stoi(this->best_score) <= this->score)
 	{
 		std::ofstream out("data/best_score.txt", std::ios::trunc);
-		out << std::to_string(score);
+		out << std::to_string(this->score);
 		out.close();
 	}
+	this->Init_Best_Score();
 }
 
 void Game_Engine::Init_Best_Score()
@@ -142,6 +115,8 @@ void Game_Engine::Set_Constant_Textures()
 void Game_Engine::Set_Menu_Textures()
 {
 	this->free_elements.push_back(new Texture_Manager(282.5, 312.5, 0.5f, 200.f, 64.f, "texture/play_button.png", sf::Color(230, 230, 230, 255)));
+	this->pause_button = new Texture_Manager(282.5, 312.5, 0.7f, 256.f, 256.f, "texture/pause.png", sf::Color(255, 255, 255, 255));
+	this->winner = new Texture_Manager(282.5, 172.5, 0.4f, 256.f, 256.f, "texture/winner.png", sf::Color(255, 255, 255, 255));
 }
 
 void Game_Engine::Delete_Textures()
@@ -156,38 +131,54 @@ void Game_Engine::Draw_Objects()
 {
 	for (size_t i = 0; i < back_groud.size(); i++)
 	{
-		this->window.draw(*this->back_groud[i]);
+		this->back_groud[i]->Render(this->window);
 	}
 	this->window.draw(score_text);
 	this->window.draw(best_score_text);
-	this->window.draw(*this->apple);
+	this->apple->Render(this->window);
 	for (size_t i = 1; i < this->snake.size(); i++)
 	{
-		this->window.draw(*this->snake[i]);
+		this->snake[i]->Render(this->window);
 	}
-	this->window.draw(*this->snake[0]);
+	this->snake[0]->Render(this->window, this->snake_direction, this->last_snake_direction);
 	for (size_t i = 0; i < this->free_elements.size(); i++)
 	{
-		this->window.draw(*this->free_elements[i]);
+		this->free_elements[i]->Render(this->window);
+	}
+	if (this->Pause)
+	{
+		this->pause_button->Render(this->window);
+	}
+	if (this->WON)
+	{
+		this->winner->Render(this->window);
 	}
 }
 
 //SNAKE
 void Game_Engine::Create_Snake() // pozycja zerowa x = 298.5, y = 325.5 (42.7, 101.7)
 {
-	this->snake.push_back(new Snake(298.7f, 325.7f, sf::Color::Blue));
-	this->snake.push_back(new Snake(294.7f, 325.7f, sf::Color::White));
-	this->snake.push_back(new Snake(290.7f, 325.7f, sf::Color::White));
-	this->snake.push_back(new Snake(286.7f, 325.7f, sf::Color::White));
+	this->snake.push_back(new Snake(298.7f, 325.7f, sf::Color(84, 118, 229), true));
+	this->snake.push_back(new Snake(294.7f, 325.7f, sf::Color(84, 118, 229)));
+	this->snake.push_back(new Snake(290.7f, 325.7f, sf::Color(84, 118, 229)));
+	this->snake.push_back(new Snake(286.7f, 325.7f, sf::Color(84, 118, 229)));
 }
 	
 	//MOVEMENT
 void Game_Engine::Smooth_Snake_Motion()
 {
+	if (this->score >= 256)
+	{
+		this->snake_direction = DIR::STOP;
+		this->last_snake_direction = DIR::STOP;
+		this->Is_Snake_Dead = true;
+		this->WON = true;
+	}
 	if (this->Is_Snake_Outside())
 	{
 		this->snake_direction = DIR::STOP;
 		this->last_snake_direction = DIR::STOP;
+		this->Is_Snake_Dead = true;
 	}
 	if (this->score > 4)
 	{
@@ -309,11 +300,11 @@ bool Game_Engine::Is_Snake_On_The_Spot()
 {
 	for (int i = 0; i < 16; ++i)
 	{
-		if (static_cast<int>(this->snake[0]->getPosition().x) == i * 32 + 42)
+		if (static_cast<int>(this->snake[0]->GetSnakePosition().x) == i * 32 + 42)
 		{
 			for (int j = 0; j < 16; ++j)
 			{
-				if (static_cast<int>(this->snake[0]->getPosition().y) == j * 32 + 101)
+				if (static_cast<int>(this->snake[0]->GetSnakePosition().y) == j * 32 + 101)
 				{
 					return true;
 				}
@@ -325,8 +316,10 @@ bool Game_Engine::Is_Snake_On_The_Spot()
 
 bool Game_Engine::Is_Snake_Outside()
 {
-	if(this->snake[0]->getPosition().x > 522.7f || this->snake[0]->getPosition().x < 42.7f || this->snake[0]->getPosition().y > 581.7f || this->snake[0]->getPosition().y < 101.7f)
+	if(this->snake[0]->GetSnakePosition().x > 522.7f || this->snake[0]->GetSnakePosition().x < 42.7f || this->snake[0]->GetSnakePosition().y > 581.7f || this->snake[0]->GetSnakePosition().y < 101.7f)
 	{
+		this->snake[0]->SetDeadReason(DEAD::WALL);
+		std::cout << *this->snake[0] << std::endl;
 		this->Set_Best_Score();
 		return true;
 	}
@@ -338,15 +331,29 @@ void Game_Engine::Touch_His_Body()
 {
 	for (size_t i = 16; i < this->snake.size(); ++i)
 	{
-		sf::Vector2f diff = this->snake[0]->getPosition() - this->snake[i]->getPosition();
+		sf::Vector2f diff = this->snake[0]->GetSnakePosition() - this->snake[i]->GetSnakePosition();
 		float distance = std::sqrt(diff.x * diff.x + diff.y * diff.y);
 		if (distance <= 21.37f)
 		{
+			this->snake[0]->SetDeadReason(DEAD::TAIL);
 			this->snake_direction = DIR::STOP;
 			this->last_snake_direction = DIR::STOP;
 			this->Set_Best_Score();
+			std::cout << *this->snake[0] << std::endl;
+			this->Is_Snake_Dead = true;
 		}
 	}
+}
+
+void Game_Engine::Reset_Game()
+{
+	this->Kill_Snake();
+	this->Reset_Score();
+}
+
+void Game_Engine::Reset_Score()
+{
+	this->score = 0;
 }
 
 void Game_Engine::Occupied_Spot()
@@ -362,32 +369,37 @@ void Game_Engine::Occupied_Spot()
 
 void Game_Engine::Increase_Snake_Length()
 {
-	this->snake.push_back(new Snake(this->last_position_2.x, last_position_2.y, sf::Color::White));
-	this->snake.push_back(new Snake(this->last_position_2.x, last_position_2.y, sf::Color::White));
-	this->snake.push_back(new Snake(this->last_position_2.x, last_position_2.y, sf::Color::White));
-	this->snake.push_back(new Snake(this->last_position_2.x, last_position_2.y, sf::Color::White));
-	this->snake.push_back(new Snake(this->last_position_2.x, last_position_2.y, sf::Color::White));
-	this->snake.push_back(new Snake(this->last_position_2.x, last_position_2.y, sf::Color::White));
-	this->snake.push_back(new Snake(this->last_position_2.x, last_position_2.y, sf::Color::White));
-	this->snake.push_back(new Snake(this->last_position_2.x, last_position_2.y, sf::Color::White));
+	this->snake.push_back(new Snake(this->last_position_2.x, last_position_2.y, sf::Color(84, 118, 229)));
+	this->snake.push_back(new Snake(this->last_position_2.x, last_position_2.y, sf::Color(84, 118, 229)));
+	this->snake.push_back(new Snake(this->last_position_2.x, last_position_2.y, sf::Color(84, 118, 229)));
+	this->snake.push_back(new Snake(this->last_position_2.x, last_position_2.y, sf::Color(84, 118, 229)));
+	this->snake.push_back(new Snake(this->last_position_2.x, last_position_2.y, sf::Color(84, 118, 229)));
+	this->snake.push_back(new Snake(this->last_position_2.x, last_position_2.y, sf::Color(84, 118, 229)));
+	this->snake.push_back(new Snake(this->last_position_2.x, last_position_2.y, sf::Color(84, 118, 229)));
+	this->snake.push_back(new Snake(this->last_position_2.x, last_position_2.y, sf::Color(84, 118, 229)));
 }
 
 void Game_Engine::Kill_Snake()
 {
-	//if (this->snake[0].getpo)
-	//{
-	//
-	//}
+	for (size_t i = 0; i < this->snake.size(); ++i)
+	{
+		delete this->snake[i];
+	}
+	this->snake.clear();
+	this->Create_Snake();
 }
 
 //APPLE
 void Game_Engine::Apple_Eaten()
 {
-	sf::Vector2f diff = this->apple->getPosition() - this->snake[0]->getPosition();
+	sf::Vector2f diff = this->apple->GetPosition() - this->snake[0]->GetSnakePosition();
 	float distance = std::sqrt(diff.x * diff.x + diff.y * diff.y);
 	if (distance <= 25.f)
 	{
+		std::cout << "Deleted apple on position :" << *this->apple << std::endl;
 		this->apple->Generate_Position();
+		this->snake[0]->Update_Apple_Position(this->apple->GetPosition());
+		std::cout << "Created apple on position :" << *this->apple << std::endl;
 		this->Increase_Snake_Length();
 		this->score += 1.f;
 		this->score_text.setString(std::to_string(this->score));
@@ -397,6 +409,7 @@ void Game_Engine::Apple_Eaten()
 void Game_Engine::Create_Apple()
 {
 	this->apple = new Apple();
+	this->snake[0]->Update_Apple_Position(this->apple->GetPosition());
 }
 
 //KEYBOARD
@@ -411,6 +424,7 @@ void Game_Engine::Check_Keyboard()
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A))
 		{
 			this->snake_direction = DIR::LEFT;
+			this->Pause = false;
 		}
 	}
 	if (this->last_snake_direction != DIR::LEFT)
@@ -418,6 +432,7 @@ void Game_Engine::Check_Keyboard()
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D))
 		{
 			this->snake_direction = DIR::RIGHT;
+			this->Pause = false;
 		}
 	}
 	if (this->last_snake_direction != DIR::UP)
@@ -425,6 +440,7 @@ void Game_Engine::Check_Keyboard()
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S))
 		{
 			this->snake_direction = DIR::DOWN;
+			this->Pause = false;
 		}
 	}
 	if (this->last_snake_direction != DIR::DOWN)
@@ -432,13 +448,62 @@ void Game_Engine::Check_Keyboard()
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W))
 		{
 			this->snake_direction = DIR::UP;
+			this->Pause = false;
 		}
 	}
 	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space))
 	{
+		this->Pause = true;
 		this->snake_direction = DIR::STOP;
 	}
 }
 
+void Game_Engine::Pull_Events()
+{
+	sf::Event event;
+	while (this->window.pollEvent(event))
+	{
+		if (!this->In_Menu)
+		{
+			this->Check_Keyboard();
+		}
+		// wykrywanie myszy oraz wcisniecia przycisku
+		if (this->back_groud[1]->GetGlobalBounds().contains(this->window.mapPixelToCoords(sf::Mouse::getPosition(this->window))) && event.type == sf::Event::MouseButtonPressed)
+		{
+			this->window.close();
+		}
+		if (this->In_Menu)
+		{
+			if (this->free_elements[0]->GetGlobalBounds().contains(this->window.mapPixelToCoords(sf::Mouse::getPosition(this->window))) && event.type == sf::Event::MouseButtonPressed)
+			{
+				this->WON = false;
+				this->In_Menu = false;
+				this->back_groud[0]->SetColor(sf::Color(255, 255, 255, 255));
+				delete this->free_elements[0];
+				this->free_elements.clear();
+			}
+		}
+		// wykrywanie myszy
+		if (this->back_groud[1]->GetGlobalBounds().contains(this->window.mapPixelToCoords(sf::Mouse::getPosition(this->window))))
+		{
+			this->back_groud[1]->SetColor(sf::Color(255, 255, 255, 255));
+		}
+		else
+		{
+			this->back_groud[1]->SetColor(sf::Color(190, 190, 190, 255));
+		}
+		if (this->In_Menu)
+		{
+			if (this->free_elements[0]->GetGlobalBounds().contains(this->window.mapPixelToCoords(sf::Mouse::getPosition(this->window))))
+			{
+				this->free_elements[0]->SetColor(sf::Color(255, 255, 255, 255));
+			}
+			else
+			{
+				this->free_elements[0]->SetColor(sf::Color(190, 190, 190, 255));
+			}
+		}
+	}
+}
 
 

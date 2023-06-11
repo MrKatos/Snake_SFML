@@ -20,3 +20,8 @@ namespace DIR
 {
 	enum Direction { LEFT, RIGHT, UP, DOWN, STOP };
 }
+
+namespace DEAD
+{
+	enum Dead_Reason { WALL, TAIL, UNKNOWN };
+}

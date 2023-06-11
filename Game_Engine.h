@@ -15,6 +15,8 @@ private:
 	Texture_Manager obj;
 	std::vector<Texture_Manager*> back_groud;
 	std::vector<Texture_Manager*> free_elements;
+	Texture_Manager* pause_button;
+	Texture_Manager* winner;
 
 	//SNAKE
 	std::vector<Snake*> snake;
@@ -24,6 +26,8 @@ private:
 	sf::Vector2f last_position_2;
 	float speed = 60;
 	const float snake_speed = 4;
+	bool Is_Snake_Dead = false;
+	
 
 	//APPLE
 	Apple* apple;
@@ -35,7 +39,11 @@ private:
 	sf::Clock clock;
 	sf::Time elapsed;
 	sf::Time time_per_frame;
+
+	//MENU
 	bool In_Menu = true;
+	bool Pause = false;
+	bool WON = false;
 
 	//SCORE
 	sf::Text score_text, best_score_text;
@@ -46,24 +54,44 @@ private:
 public:
 	Game_Engine();
 	void Run();
-	void Init_Window();
+	
+	//INITIALIZATION
 	void Init_Text();
+	void Init_Replay_Menu();
+	void Init_Window();
+	void Set_Best_Score();
+	void Init_Best_Score();
+
+	//TEXTURES
 	void Set_Constant_Textures();
 	void Set_Menu_Textures();
-	void Init_Best_Score();
-	void Set_Best_Score();
 	void Delete_Textures();
 	void Draw_Objects();
+
+	//SNAKE
 	void Create_Snake();
-	void Smooth_Snake_Motion();
-	bool Is_Snake_On_The_Spot();
-	bool Is_Snake_Outside();
+
+		//MOVEMENT
+		void Smooth_Snake_Motion();
+
+		//QUESTIONS
+		bool Is_Snake_On_The_Spot();
+		bool Is_Snake_Outside();
+
+		//FUNCTIONS
+		void Touch_His_Body();
+		void Reset_Game();
+		void Reset_Score();
+		void Occupied_Spot();
+		void Increase_Snake_Length();
+		void Kill_Snake();
+
+	//APPLE
 	void Apple_Eaten();
-	void Increase_Snake_Length();
-	void Kill_Snake();
-	void Check_Keyboard();
 	void Create_Apple();
-	void Occupied_Spot();
-	void Touch_His_Body();
+	
+	//KEYBOARD
+	void Check_Keyboard();
+	void Pull_Events();
 };
 
